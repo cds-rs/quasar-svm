@@ -1,3 +1,4 @@
+mod cpi_tree;
 mod error;
 mod program_cache;
 mod svm;
@@ -16,6 +17,7 @@ pub use solana_sdk_ids::system_program;
 
 pub use crate::error::ProgramError;
 pub use crate::program_cache::loader_keys;
+pub use crate::cpi_tree::CpiNode;
 pub use crate::svm::{
     ExecutedInstruction, ExecutionResult, ExecutionTrace, QuasarSvm, QuasarSvmConfig,
 };
