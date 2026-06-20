@@ -326,6 +326,15 @@ impl QuasarSvm {
         let (sanitized_message, transaction_accounts) =
             self.compile_accounts(instructions, &merged);
 
+        // Snapshot keys BEFORE the vec moves into the TransactionContext. The
+        // instruction trace uses `index_in_transaction` into the full context,
+        // which includes accounts added beyond the sanitized message (the
+        // instructions sysvar, CPI-introduced programs, etc.); using only
+        // `sanitized_message.account_keys()` to resolve those indices produces
+        // out-of-bounds lookups that silently emit default pubkeys in the trace.
+        let tx_account_keys: Vec<Pubkey> =
+            transaction_accounts.iter().map(|(k, _)| *k).collect();
+
         let mut transaction_context = TransactionContext::new(
             transaction_accounts,
             self.sysvars.rent.clone(),
@@ -365,7 +374,7 @@ impl QuasarSvm {
 
         // Extract execution trace from transaction context (using logs for accurate results)
         let execution_trace =
-            Self::extract_execution_trace(&mut transaction_context, &sanitized_message, &logs);
+            Self::extract_execution_trace(&mut transaction_context, &tx_account_keys, &logs);
 
         ExecutionResult {
             compute_units_consumed,
@@ -696,9 +705,15 @@ impl QuasarSvm {
 
     /// Extract execution trace from the transaction context and logs.
     /// Returns execution trace with full instruction data, compute units, and results.
+    ///
+    /// `tx_account_keys` must be the full ordered key list from `transaction_accounts`
+    /// (the vec passed to `TransactionContext::new`), NOT just the sanitized message's
+    /// static account_keys. The instruction trace's `index_in_transaction` fields index
+    /// into the full context, which includes CPI-added programs and the instructions
+    /// sysvar appended past the message boundary.
     fn extract_execution_trace(
         transaction_context: &mut TransactionContext,
-        sanitized_message: &SanitizedMessage,
+        tx_account_keys: &[Pubkey],
         logs: &[String],
     ) -> ExecutionTrace {
         // First, collect instruction data before taking the trace
@@ -715,7 +730,6 @@ impl QuasarSvm {
 
         // Now take the trace
         let instruction_trace = transaction_context.take_instruction_trace();
-        let account_keys = sanitized_message.account_keys();
 
         // Parse logs to get per-instruction results and compute units
         let log_results = Self::parse_log_results(logs);
@@ -727,7 +741,7 @@ impl QuasarSvm {
             .map(|(idx, frame)| {
                 let stack_depth = frame.nesting_level as u8;
                 let program_id_index = frame.program_account_index_in_tx as usize;
-                let program_id = *account_keys
+                let program_id = *tx_account_keys
                     .get(program_id_index)
                     .unwrap_or(&Pubkey::default());
 
@@ -739,7 +753,8 @@ impl QuasarSvm {
                     .instruction_accounts
                     .iter()
                     .filter_map(|acc| {
-                        let pubkey = account_keys.get(acc.index_in_transaction as usize)?;
+                        let pubkey =
+                            tx_account_keys.get(acc.index_in_transaction as usize)?;
                         Some(AccountMeta {
                             pubkey: *pubkey,
                             is_signer: acc.is_signer(),
