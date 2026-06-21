@@ -1,0 +1,30 @@
+[package]
+name = "quasar-babelfish-report"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Runs quasar-svm's SPL scenarios (token transfer, wrong-authority reject, ATA
+# create) through the TestSVM quasar adapter and renders the same per-scenario
+# crime-scene report as the mpl-core dogfood. Deps resolve to LOCAL paths. Own
+# workspace (empty `[workspace]`) for an isolated lockfile (the quasar/agave-4.0
+# graph cannot share a lock with the litesvm graph).
+
+[dependencies]
+testsvm = { path = "../../anchor-litesvm/crates/testsvm" }
+testsvm-quasar = { path = "../../anchor-litesvm/crates/testsvm-quasar" }
+quasar-svm = { git = "https://github.com/cds-rs/quasar-svm", branch = "babelfish" }
+spl-token-interface = "2.0.0"
+
+solana-account = "3.2"
+solana-pubkey = "3.0"
+solana-keypair = "3.1"
+solana-signer = "3.0"
+solana-instruction = "3.2"
+
+# Use the LOCAL quasar-svm checkout (this repo) wherever the adapter git-deps it,
+# so the report crate and the adapter share one quasar-svm.
+[patch."https://github.com/cds-rs/quasar-svm"]
+quasar-svm = { path = "../svm" }
+
+[workspace]
